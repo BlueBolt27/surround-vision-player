@@ -1,0 +1,354 @@
+<Window x:Class="SurroundVisionPlayer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Surround Vision Player — 2027 Chevy Bolt"
+        Width="1280" Height="820" MinWidth="900" MinHeight="580"
+        Background="#1A1A2E" Foreground="#E0E0E0"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        Closing="Window_Closing">
+
+    <Window.Resources>
+
+        <!-- ── Brushes ── -->
+        <SolidColorBrush x:Key="BgBrush"      Color="#1A1A2E"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#16213E"/>
+        <SolidColorBrush x:Key="BorderBrush"  Color="#0F3460"/>
+        <SolidColorBrush x:Key="AccentBrush"  Color="#E94560"/>
+        <SolidColorBrush x:Key="TextBrush"    Color="#E0E0E0"/>
+        <SolidColorBrush x:Key="SubBrush"     Color="#888888"/>
+
+        <!-- ── Regular button ── -->
+        <Style x:Key="DarkBtn" TargetType="Button">
+            <Setter Property="Background"      Value="#16213E"/>
+            <Setter Property="Foreground"      Value="#E0E0E0"/>
+            <Setter Property="BorderBrush"     Value="#0F3460"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="12,5"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#0F3460"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#C73652"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#444"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#2A2A3E"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Angle toggle button ── -->
+        <Style x:Key="AngleBtn" TargetType="ToggleButton">
+            <Setter Property="Background"      Value="#16213E"/>
+            <Setter Property="Foreground"      Value="#E0E0E0"/>
+            <Setter Property="BorderBrush"     Value="#0F3460"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"         Value="0,8"/>
+            <Setter Property="FontSize"        Value="13"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="5"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E94560"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#E94560"/>
+                                <Setter Property="FontWeight" Value="Bold"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#0F3460"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── ListBox ── -->
+        <Style x:Key="DarkList" TargetType="ListBox">
+            <Setter Property="Background"      Value="#16213E"/>
+            <Setter Property="BorderBrush"     Value="#0F3460"/>
+            <Setter Property="Foreground"      Value="#E0E0E0"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+        <Style x:Key="DarkListItem" TargetType="ListBoxItem">
+            <Setter Property="Padding"    Value="8,5"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E94560"/>
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsSelected"  Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="#0F3460"/>
+                            </MultiTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ── Seek Slider ── -->
+        <Style x:Key="SeekSliderStyle" TargetType="Slider">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6" CornerRadius="3" Background="#E94560"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Focusable="False">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse Width="14" Height="14"
+                                                         Fill="White" Stroke="#E94560"
+                                                         StrokeThickness="2"/>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6" CornerRadius="3" Background="#0F3460"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+    </Window.Resources>
+
+    <!-- ── Menu bar ── -->
+    <Window.InputBindings>
+        <KeyBinding Modifiers="Ctrl" Key="O" Command="{x:Static ApplicationCommands.Open}"/>
+    </Window.InputBindings>
+
+    <DockPanel>
+
+        <Menu DockPanel.Dock="Top" Background="#16213E" Foreground="#E0E0E0">
+            <MenuItem Header="_File" Foreground="#E0E0E0">
+                <MenuItem Header="Open Thumb Drive…" Click="OpenDrive_Click"
+                          InputGestureText="Ctrl+O"/>
+                <Separator Background="#0F3460"/>
+                <MenuItem Header="Quit" Click="Quit_Click" InputGestureText="Ctrl+Q"/>
+            </MenuItem>
+        </Menu>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ═══════════════ LEFT SIDEBAR ═══════════════ -->
+            <DockPanel Grid.Column="0" Margin="8,8,4,8">
+
+                <TextBlock DockPanel.Dock="Top"
+                           Text="Trips" FontSize="14" FontWeight="Bold"
+                           Foreground="#E0E0E0" Margin="0,0,0,6"/>
+
+                <TextBlock x:Name="CountLabel" DockPanel.Dock="Bottom"
+                           Foreground="#888888" FontSize="11"
+                           TextAlignment="Center" Margin="0,4,0,0"/>
+
+                <ListBox x:Name="SessionList"
+                         Style="{StaticResource DarkList}"
+                         ItemContainerStyle="{StaticResource DarkListItem}"
+                         SelectionChanged="SessionList_SelectionChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Label}" TextWrapping="Wrap"
+                                       FontSize="12" Foreground="#E0E0E0"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+            </DockPanel>
+
+            <!-- ═══════════════ MAIN AREA ═══════════════ -->
+            <DockPanel Grid.Column="1" Margin="4,8,8,8" LastChildFill="True">
+
+                <!-- Status bar -->
+                <TextBlock x:Name="StatusLabel" DockPanel.Dock="Bottom"
+                           Foreground="#888888" FontSize="11"
+                           TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
+
+                <!-- Transport + speed -->
+                <Border DockPanel.Dock="Bottom"
+                        BorderBrush="#0F3460" BorderThickness="1" CornerRadius="6"
+                        Margin="0,6,0,0" Padding="8,6" Background="#16213E">
+                    <DockPanel>
+                        <!-- Speed buttons (right side) -->
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                                    VerticalAlignment="Center" Margin="10,0,0,0">
+                            <TextBlock Text="Speed:" Foreground="#888888"
+                                       VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <Button Content="½×" Style="{StaticResource DarkBtn}"
+                                    Click="HalfSpeed_Click"  MinWidth="44" Margin="2,0"/>
+                            <Button Content="1×"  Style="{StaticResource DarkBtn}"
+                                    Click="NormalSpeed_Click" MinWidth="44" Margin="2,0"/>
+                            <Button Content="2×"  Style="{StaticResource DarkBtn}"
+                                    Click="DoubleSpeed_Click" MinWidth="44" Margin="2,0"/>
+                        </StackPanel>
+                        <!-- Transport buttons (center) -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                            <Button Content="⏮" Style="{StaticResource DarkBtn}"
+                                    Click="Beginning_Click" FontSize="18"
+                                    Width="50" Height="44" Margin="2,0"
+                                    ToolTip="Go to beginning"/>
+                            <Button Content="⏪" Style="{StaticResource DarkBtn}"
+                                    Click="StepBack_Click" FontSize="18"
+                                    Width="50" Height="44" Margin="2,0"
+                                    ToolTip="Rewind 10 s  [←]"/>
+                            <Button x:Name="BtnPlay" Content="▶"
+                                    Style="{StaticResource DarkBtn}" FontSize="18"
+                                    Click="Play_Click" Width="50" Height="44" Margin="2,0"
+                                    ToolTip="Play / Pause  [Space]"/>
+                            <Button Content="⏩" Style="{StaticResource DarkBtn}"
+                                    Click="StepFwd_Click" FontSize="18"
+                                    Width="50" Height="44" Margin="2,0"
+                                    ToolTip="Fast-forward 10 s  [→]"/>
+                            <Button Content="⏭" Style="{StaticResource DarkBtn}"
+                                    Click="End_Click" FontSize="18"
+                                    Width="50" Height="44" Margin="2,0"
+                                    ToolTip="Go to end of clip"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- Seek bar -->
+                <Grid DockPanel.Dock="Bottom" Margin="0,4,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="44"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="44"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TimeLabel" Grid.Column="0"
+                               Text="0:00" Foreground="#E0E0E0"
+                               VerticalAlignment="Center"/>
+                    <Slider x:Name="SeekSlider" Grid.Column="1"
+                            Style="{StaticResource SeekSliderStyle}"
+                            Minimum="0" Maximum="10000" Value="0"
+                            VerticalAlignment="Center"
+                            PreviewMouseLeftButtonDown="SeekSlider_MouseDown"
+                            PreviewMouseLeftButtonUp="SeekSlider_MouseUp"
+                            ValueChanged="SeekSlider_ValueChanged"/>
+                    <TextBlock x:Name="DurLabel" Grid.Column="2"
+                               Text="0:00" Foreground="#E0E0E0"
+                               TextAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+
+                <!-- Active angle label -->
+                <TextBlock x:Name="AngleLabel" DockPanel.Dock="Bottom"
+                           Text="FRONT" HorizontalAlignment="Center"
+                           FontSize="13" FontWeight="Bold"
+                           Foreground="#E94560" Margin="0,2,0,2"/>
+
+                <!-- Angle selector buttons -->
+                <Border DockPanel.Dock="Bottom"
+                        BorderBrush="#0F3460" BorderThickness="1" CornerRadius="6"
+                        Margin="0,4,0,0" Padding="8,6" Background="#16213E">
+                    <UniformGrid Rows="1">
+                        <ToggleButton x:Name="BtnFront" Content="FRONT"
+                                      Style="{StaticResource AngleBtn}"
+                                      IsChecked="True" Margin="4,0"
+                                      Click="Angle_Click" Tag="FRONT"/>
+                        <ToggleButton x:Name="BtnLeft"  Content="LEFT"
+                                      Style="{StaticResource AngleBtn}"
+                                      Margin="4,0"
+                                      Click="Angle_Click" Tag="LEFT"/>
+                        <ToggleButton x:Name="BtnRear"  Content="REAR"
+                                      Style="{StaticResource AngleBtn}"
+                                      Margin="4,0"
+                                      Click="Angle_Click" Tag="REAR"/>
+                        <ToggleButton x:Name="BtnRight" Content="RIGHT"
+                                      Style="{StaticResource AngleBtn}"
+                                      Margin="4,0"
+                                      Click="Angle_Click" Tag="RIGHT"/>
+                    </UniformGrid>
+                </Border>
+
+                <!-- ── Video container: 4 stacked MediaElements ──
+                     All four play simultaneously.  Visibility.Hidden keeps
+                     the element in the render tree (still decoding) but
+                     invisible.  Switching angles just flips Visibility.      -->
+                <Grid x:Name="VideoGrid" Background="Black">
+                    <MediaElement x:Name="VideoFront"
+                                  LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                  Stretch="Uniform" Visibility="Visible"
+                                  MediaOpened="Media_Opened"
+                                  MediaEnded="Media_Ended"
+                                  MediaFailed="Media_Failed"/>
+                    <MediaElement x:Name="VideoLeft"
+                                  LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                  Stretch="Uniform" Visibility="Hidden"
+                                  IsMuted="True"/>
+                    <MediaElement x:Name="VideoRear"
+                                  LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                  Stretch="Uniform" Visibility="Hidden"
+                                  IsMuted="True"/>
+                    <MediaElement x:Name="VideoRight"
+                                  LoadedBehavior="Manual" UnloadedBehavior="Stop"
+                                  Stretch="Uniform" Visibility="Hidden"
+                                  IsMuted="True"/>
+                </Grid>
+
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SurroundVisionPlayer</RootNamespace>
+    <AssemblyName>SurroundVisionPlayer</AssemblyName>
+    <Platforms>ARM64;x64</Platforms>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+
+</Project>

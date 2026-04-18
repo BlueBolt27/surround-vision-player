@@ -1,0 +1,81 @@
+<Window x:Class="SurroundVisionPlayer.DrivePickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Thumb Drive"
+        Width="540" Height="240"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="#1A1A2E" Foreground="#E0E0E0"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <Style x:Key="Btn" TargetType="Button">
+            <Setter Property="Background"   Value="#16213E"/>
+            <Setter Property="Foreground"   Value="#E0E0E0"/>
+            <Setter Property="BorderBrush"  Value="#0F3460"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"      Value="12,5"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#0F3460"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#555"/>
+                                <Setter Property="BorderBrush" Value="#333"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="20" VerticalAlignment="Center">
+
+        <TextBlock TextWrapping="Wrap" Foreground="#AAAAAA" FontSize="12" Margin="0,0,0,12">
+            Select the root folder of the Chevy Bolt thumb drive.
+            The recordings folder will be located automatically.
+        </TextBlock>
+
+        <!-- Path row -->
+        <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="#16213E" BorderBrush="#0F3460"
+                    BorderThickness="1" CornerRadius="4" Padding="8,5" Margin="0,0,6,0">
+                <TextBlock x:Name="PathLabel" Text="(no folder selected)"
+                           Foreground="#888888" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
+            </Border>
+            <Button Grid.Column="1" Content="Browse…" Style="{StaticResource Btn}"
+                    Click="Browse_Click" MinWidth="80"/>
+        </Grid>
+
+        <!-- Status -->
+        <TextBlock x:Name="StatusLabel" FontSize="11" TextWrapping="Wrap"
+                   Margin="0,0,0,14" Height="32"/>
+
+        <!-- OK / Cancel -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button x:Name="OkButton" Content="Open" Style="{StaticResource Btn}"
+                    IsDefault="True" IsEnabled="False"
+                    Click="Ok_Click" MinWidth="70" Margin="0,0,8,0"/>
+            <Button Content="Cancel" Style="{StaticResource Btn}"
+                    IsCancel="True" MinWidth="70"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>
