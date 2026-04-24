@@ -13,6 +13,7 @@ public partial class MainWindow : Window
 {
     // ── Source data ───────────────────────────────────────────────────────────
 
+    private string?                                               _driveFolderPath;
     private SortedDictionary<string, Dictionary<string, string>> _driveRecordings   = [];
     private List<List<string>>                                    _driveSessions     = [];
     private SortedDictionary<string, Dictionary<string, string>> _archiveRecordings = [];
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
     private void LoadFolder(string svrFolder)
     {
         StopAll();
+        _driveFolderPath = svrFolder;
         _driveRecordings = RecordingScanner.Scan(svrFolder);
         List<string> timestamps = [.. _driveRecordings.Keys];
         _driveSessions   = SessionGrouper.Group(timestamps);
@@ -542,6 +544,7 @@ public partial class MainWindow : Window
         if (e.NewValue is not TreeViewItem tv || tv.Tag is not SessionListItem item) return;
 
         BtnArchive.IsEnabled = true;
+        BtnDelete.IsEnabled  = true;
         if (item.FirstTs == _currentTs && item.SessionIndex == _currentSession) return;
 
         bool wasPlaying = _isPlaying;
@@ -563,6 +566,8 @@ public partial class MainWindow : Window
         }
 
         if (e.NewValue is not TreeViewItem tv || tv.Tag is not SessionListItem item) return;
+
+        BtnDeleteArchive.IsEnabled = true;
         if (item.FirstTs == _currentTs && item.SessionIndex == _currentSession) return;
 
         bool wasPlaying = _isPlaying;
@@ -731,6 +736,78 @@ public partial class MainWindow : Window
         _settings.ArchiveFolder = dlg.FolderName;
         _settings.Save();
         return true;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Delete
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void DeleteDrive_Click(object sender, RoutedEventArgs e)
+    {
+        if (DriveTree.SelectedItem is not TreeViewItem tvi
+            || tvi.Tag is not SessionListItem item
+            || item.Session is null
+            || _driveFolderPath is null) return;
+
+        int fileCount = Archiver.CountFiles(item.Session, _driveRecordings);
+        var confirm = MessageBox.Show(
+            $"Permanently delete {item.Session.Count} clip(s) ({fileCount} file(s)) from the thumb drive?\n\nThis cannot be undone.",
+            "Delete Trip",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        DeleteFiles(item.Session, _driveRecordings);
+        LoadFolder(_driveFolderPath);
+    }
+
+    private void DeleteArchive_Click(object sender, RoutedEventArgs e)
+    {
+        if (ArchiveTree.SelectedItem is not TreeViewItem tvi
+            || tvi.Tag is not SessionListItem item
+            || item.Session is null
+            || string.IsNullOrEmpty(_settings.ArchiveFolder)) return;
+
+        int fileCount = Archiver.CountFiles(item.Session, _archiveRecordings);
+        var confirm = MessageBox.Show(
+            $"Permanently delete {item.Session.Count} clip(s) ({fileCount} file(s)) from the archive?\n\nThis cannot be undone.",
+            "Delete Trip",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        if (ReferenceEquals(_recordings, _archiveRecordings))
+        {
+            StopAll();
+            foreach (var me in _videos.Values) me.Source = null;
+            _currentTs      = null;
+            _currentSession = -1;
+        }
+
+        DeleteFiles(item.Session, _archiveRecordings);
+        PruneEmptyDateDirs(_settings.ArchiveFolder);
+        LoadArchive();
+        StatusLabel.Text = $"Deleted {fileCount} file(s) from archive.";
+    }
+
+    private static void DeleteFiles(
+        IReadOnlyList<string> timestamps,
+        SortedDictionary<string, Dictionary<string, string>> recordings)
+    {
+        foreach (var ts in timestamps)
+        {
+            if (!recordings.TryGetValue(ts, out var files)) continue;
+            foreach (var path in files.Values)
+                if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    private static void PruneEmptyDateDirs(string archiveRoot)
+    {
+        if (!Directory.Exists(archiveRoot)) return;
+        foreach (var dir in Directory.EnumerateDirectories(archiveRoot))
+            if (!Directory.EnumerateFileSystemEntries(dir).Any())
+                Directory.Delete(dir);
     }
 
     // ═════════════════════════════════════════════════════════════════════════
