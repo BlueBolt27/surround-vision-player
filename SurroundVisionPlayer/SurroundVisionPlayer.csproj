@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -10,7 +10,7 @@
     <AssemblyName>SurroundVisionPlayer</AssemblyName>
     <Platforms>ARM64;x64</Platforms>
     <LangVersion>12</LangVersion>
-    <Version>0.2.2</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
 </Project>

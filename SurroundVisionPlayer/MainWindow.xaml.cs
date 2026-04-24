@@ -6,6 +6,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using SurroundVisionPlayer.Logic;
+using Windows.Media.MediaProperties;
+using Windows.Media.Transcoding;
+using Windows.Storage;
 
 namespace SurroundVisionPlayer;
 
@@ -18,6 +21,7 @@ public partial class MainWindow : Window
     private List<List<string>>                                    _driveSessions     = [];
     private SortedDictionary<string, Dictionary<string, string>> _archiveRecordings = [];
     private List<List<string>>                                    _archiveSessions   = [];
+    private List<ClipEntry>                                       _clips             = [];
 
     // Points to whichever source is currently being played
     private SortedDictionary<string, Dictionary<string, string>> _recordings = [];
@@ -35,6 +39,12 @@ public partial class MainWindow : Window
     private int      _pendingOpens;
     private bool     _suppressTreeChange;
     private bool     _quadView;
+
+    // ── Clip mode & in/out state ──────────────────────────────────────────────
+
+    private string? _clipModePath;
+    private long    _inPointMs  = -1;
+    private long    _outPointMs = -1;
 
     // ── Fullscreen state ──────────────────────────────────────────────────────
 
@@ -142,6 +152,7 @@ public partial class MainWindow : Window
         }
 
         PopulateTree(ArchiveTree, _archiveSessions, _archiveRecordings);
+        LoadClips();
 
         if (SourceTabs.SelectedIndex == 1)
             UpdateCountLabel();
@@ -222,20 +233,26 @@ public partial class MainWindow : Window
 
     private void UpdateCountLabel()
     {
-        if (SourceTabs.SelectedIndex == 0)
+        switch (SourceTabs.SelectedIndex)
         {
-            int n = _driveSessions.Count, c = _driveRecordings.Count;
-            CountLabel.Text = n > 0 ? $"{n} trip(s), {c} clips" : string.Empty;
-        }
-        else
-        {
-            if (string.IsNullOrEmpty(_settings.ArchiveFolder))
-                CountLabel.Text = "No archive folder configured";
-            else
+            case 0:
             {
-                int n = _archiveSessions.Count, c = _archiveRecordings.Count;
-                CountLabel.Text = $"{n} trip(s), {c} clips archived";
+                int n = _driveSessions.Count, c = _driveRecordings.Count;
+                CountLabel.Text = n > 0 ? $"{n} trip(s), {c} clips" : string.Empty;
+                break;
             }
+            case 1:
+                if (string.IsNullOrEmpty(_settings.ArchiveFolder))
+                    CountLabel.Text = "No archive folder configured";
+                else
+                {
+                    int n = _archiveSessions.Count, c = _archiveRecordings.Count;
+                    CountLabel.Text = $"{n} trip(s), {c} clips archived";
+                }
+                break;
+            case 2:
+                CountLabel.Text = _clips.Count > 0 ? $"{_clips.Count} exported clip(s)" : "No clips yet";
+                break;
         }
     }
 
@@ -471,7 +488,7 @@ public partial class MainWindow : Window
 
     private void SyncTimer_Tick(object? sender, EventArgs e)
     {
-        if (_currentTs is null) return;
+        if (_currentTs is null && _clipModePath is null) return;
 
         var active       = _videos[_activeAngle];
         var pos          = active.Position;
@@ -508,6 +525,17 @@ public partial class MainWindow : Window
         if (sender is MediaElement me)
             me.SpeedRatio = _playbackRate;
 
+        // Capture duration when a clip file opens
+        if (_clipModePath is not null && sender == VideoFront)
+        {
+            var dur = VideoFront.NaturalDuration;
+            if (dur.HasTimeSpan)
+            {
+                _sessionTotalMs = (long)dur.TimeSpan.TotalMilliseconds;
+                DurLabel.Text   = FormatTime(dur.TimeSpan);
+            }
+        }
+
         if (_pendingOpens == 0)
         {
             if (_pendingSeekMs.HasValue)
@@ -523,7 +551,12 @@ public partial class MainWindow : Window
     private void Media_Ended(object sender, RoutedEventArgs e)
     {
         if (sender is MediaElement me && me == _videos[_activeAngle])
-            AdvanceToNextClip();
+        {
+            if (_clipModePath is not null)
+                StopAll();
+            else
+                AdvanceToNextClip();
+        }
     }
 
     private void Media_Failed(object sender, ExceptionRoutedEventArgs e)
@@ -541,6 +574,10 @@ public partial class MainWindow : Window
         if (e.OriginalSource is not TabControl) return;
         BtnArchive.IsEnabled = false;
         UpdateCountLabel();
+
+        // Clips tab: re-sync list in case archive folder changed
+        if (SourceTabs.SelectedIndex == 2)
+            LoadClips();
     }
 
     private void DriveTree_SelectedItemChanged(object sender,
@@ -561,6 +598,8 @@ public partial class MainWindow : Window
         BtnDelete.IsEnabled  = true;
         if (item.FirstTs == _currentTs && item.SessionIndex == _currentSession) return;
 
+        ExitClipMode();
+        ResetInOut();
         bool wasPlaying = _isPlaying;
         UseSource(_driveRecordings, _driveSessions);
         InitSessionTimeline(item.SessionIndex);
@@ -584,6 +623,8 @@ public partial class MainWindow : Window
         BtnDeleteArchive.IsEnabled = true;
         if (item.FirstTs == _currentTs && item.SessionIndex == _currentSession) return;
 
+        ExitClipMode();
+        ResetInOut();
         bool wasPlaying = _isPlaying;
         UseSource(_archiveRecordings, _archiveSessions);
         InitSessionTimeline(item.SessionIndex);
@@ -671,6 +712,12 @@ public partial class MainWindow : Window
             case Key.L: SwitchAngle("LEFT");  e.Handled = true; break;
             case Key.R: SwitchAngle("REAR");  e.Handled = true; break;
             case Key.G: SwitchAngle("RIGHT"); e.Handled = true; break;
+            case Key.I:
+                MarkIn();
+                e.Handled = true; break;
+            case Key.O:
+                MarkOut();
+                e.Handled = true; break;
             case Key.Tab:
                 SwitchAngle(RecordingScanner.CycleAngle(_activeAngle));
                 e.Handled = true; break;
@@ -837,6 +884,308 @@ public partial class MainWindow : Window
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    // Clips tab
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void LoadClips()
+    {
+        _clips = string.IsNullOrEmpty(_settings.ArchiveFolder)
+            ? []
+            : ClipsManager.ScanClips(_settings.ArchiveFolder);
+
+        PopulateClipsTree(_clips);
+
+        if (SourceTabs.SelectedIndex == 2)
+            UpdateCountLabel();
+    }
+
+    private void PopulateClipsTree(List<ClipEntry> clips)
+    {
+        _suppressTreeChange = true;
+        ClipsTree.Items.Clear();
+
+        var dateStyle = (Style)FindResource("DateNodeStyle");
+        string? prevDate = null;
+        TreeViewItem? dateNode = null;
+
+        foreach (var clip in clips)
+        {
+            var dateStr = clip.Date.ToString("yyyy-MM-dd");
+            if (dateStr != prevDate)
+            {
+                prevDate = dateStr;
+                dateNode = new TreeViewItem
+                {
+                    Header     = dateStr,
+                    IsExpanded = true,
+                    Style      = dateStyle,
+                };
+                ClipsTree.Items.Add(dateNode);
+            }
+
+            dateNode!.Items.Add(new TreeViewItem
+            {
+                Header  = clip.DisplayLabel,
+                Tag     = new ClipListItem { FilePath = clip.FilePath, Label = clip.DisplayLabel },
+                Padding = new Thickness(4, 3, 4, 3),
+            });
+        }
+
+        if (ClipsTree.Items.Count == 0)
+        {
+            ClipsTree.Items.Add(new TreeViewItem
+            {
+                Header    = string.IsNullOrEmpty(_settings.ArchiveFolder)
+                            ? "No archive folder set.\nUse File → Set Archive Folder…"
+                            : "No exported clips yet.\nUse I/O to mark in/out points, then Export.",
+                Focusable = false,
+                Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55)),
+            });
+        }
+
+        _suppressTreeChange = false;
+    }
+
+    private void ClipsTree_SelectedItemChanged(object sender,
+        RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (_suppressTreeChange) return;
+
+        if (e.NewValue is TreeViewItem tvi && tvi.Tag is not ClipListItem)
+        {
+            tvi.IsSelected = false;
+            return;
+        }
+
+        if (e.NewValue is not TreeViewItem tv || tv.Tag is not ClipListItem item) return;
+
+        BtnDeleteClip.IsEnabled = true;
+        LoadClipFile(item.FilePath);
+    }
+
+    private void LoadClipFile(string path)
+    {
+        if (_quadView) SetQuadView(false);
+        StopAll();
+
+        _clipModePath    = path;
+        _currentTs       = null;
+        _currentSession  = -1;
+        _sessionOffsetMs = 0;
+        _sessionTotalMs  = 0;
+        _clipOffsetsMs   = [0];
+        _pendingOpens    = 1;
+        _pendingSeekMs   = null;
+
+        foreach (var (angle, me) in _videos)
+        {
+            me.Source     = angle == "FRONT" ? new Uri(path, UriKind.Absolute) : null;
+            me.Visibility = angle == "FRONT" ? Visibility.Visible : Visibility.Hidden;
+            me.IsMuted    = false;
+        }
+        foreach (var (a, btn) in _angleBtns)
+        {
+            btn.IsChecked = a == "FRONT";
+            btn.IsEnabled = false;
+        }
+        BtnQuad.IsEnabled    = false;
+        BtnMarkIn.IsEnabled  = false;
+        BtnMarkOut.IsEnabled = false;
+        _activeAngle    = "FRONT";
+        AngleLabel.Text = "CLIP";
+
+        ResetSlider();
+        ResetInOut();
+        StatusLabel.Text = Path.GetFileName(path);
+    }
+
+    private void ExitClipMode()
+    {
+        if (_clipModePath is null) return;
+        _clipModePath = null;
+        foreach (var btn in _angleBtns.Values) btn.IsEnabled = true;
+        BtnQuad.IsEnabled    = true;
+        BtnMarkIn.IsEnabled  = true;
+        BtnMarkOut.IsEnabled = true;
+        foreach (var (a, me) in _videos)
+            me.Visibility = _quadView ? Visibility.Visible
+                                      : (a == _activeAngle ? Visibility.Visible : Visibility.Hidden);
+        AngleLabel.Text = _quadView ? $"QUAD ({_activeAngle})" : _activeAngle;
+    }
+
+    private void DeleteClip_Click(object sender, RoutedEventArgs e)
+    {
+        if (ClipsTree.SelectedItem is not TreeViewItem tvi
+            || tvi.Tag is not ClipListItem item) return;
+
+        var confirm = MessageBox.Show(
+            $"Permanently delete this exported clip?\n\n{item.Label}\n\nThis cannot be undone.",
+            "Delete Clip",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        if (_clipModePath == item.FilePath)
+        {
+            StopAll();
+            foreach (var me in _videos.Values) me.Source = null;
+            _clipModePath   = null;
+            _currentSession = -1;
+            foreach (var btn in _angleBtns.Values) btn.IsEnabled = true;
+            AngleLabel.Text = _activeAngle;
+        }
+
+        if (File.Exists(item.FilePath)) File.Delete(item.FilePath);
+        LoadClips();
+        StatusLabel.Text = "Clip deleted.";
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // In/Out markers
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void MarkIn()
+    {
+        if (_currentSession < 0) return;
+        _inPointMs = _sessionOffsetMs + (long)_videos[_activeAngle].Position.TotalMilliseconds;
+        if (_outPointMs >= 0 && _outPointMs <= _inPointMs) _outPointMs = -1;
+        UpdateInOutDisplay();
+    }
+
+    private void MarkOut()
+    {
+        if (_currentSession < 0) return;
+        _outPointMs = _sessionOffsetMs + (long)_videos[_activeAngle].Position.TotalMilliseconds;
+        if (_inPointMs >= 0 && _inPointMs >= _outPointMs) _inPointMs = -1;
+        UpdateInOutDisplay();
+    }
+
+    private void ResetInOut()
+    {
+        _inPointMs  = -1;
+        _outPointMs = -1;
+        UpdateInOutDisplay();
+    }
+
+    private void UpdateInOutDisplay()
+    {
+        InLabel.Text  = _inPointMs  >= 0 ? FormatTime(TimeSpan.FromMilliseconds(_inPointMs))  : "–";
+        OutLabel.Text = _outPointMs >= 0 ? FormatTime(TimeSpan.FromMilliseconds(_outPointMs)) : "–";
+        SelectionDurLabel.Text = (_inPointMs >= 0 && _outPointMs > _inPointMs)
+            ? FormatTime(TimeSpan.FromMilliseconds(_outPointMs - _inPointMs))
+            : "";
+        BtnExportClip.IsEnabled = _inPointMs >= 0 && _outPointMs > _inPointMs
+                                  && _currentSession >= 0;
+    }
+
+    private void MarkIn_Click(object sender, RoutedEventArgs e)  => MarkIn();
+    private void MarkOut_Click(object sender, RoutedEventArgs e) => MarkOut();
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Export
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private async void ExportClip_Click(object sender, RoutedEventArgs e)
+    {
+        if (_inPointMs < 0 || _outPointMs <= _inPointMs || _currentSession < 0) return;
+        if (string.IsNullOrEmpty(_settings.ArchiveFolder) && !PickArchiveFolder()) return;
+
+        BtnExportClip.IsEnabled = false;
+
+        var session    = _sessions[_currentSession];
+        var firstTs    = session[0];
+        var angle      = _activeAngle;
+        var inMs       = _inPointMs;
+        var outMs      = _outPointMs;
+        var recs       = _recordings;
+        var offsets    = _clipOffsetsMs;
+
+        int startIdx   = FindClipIndex(inMs);
+        int endIdx     = FindClipIndex(outMs);
+        int partCount  = endIdx - startIdx + 1;
+
+        var clipsDir = ClipsManager.ClipsFolder(_settings.ArchiveFolder!);
+        Directory.CreateDirectory(clipsDir);
+
+        ArchiveProgress.Maximum    = 100 * partCount;
+        ArchiveProgress.Value      = 0;
+        ArchiveProgress.Visibility = Visibility.Visible;
+        StatusLabel.Text           = "Exporting clip…";
+
+        var exported = new List<string>();
+
+        try
+        {
+            for (int i = startIdx; i <= endIdx; i++)
+            {
+                var ts = session[i];
+                if (!recs.TryGetValue(ts, out var files) || !files.TryGetValue(angle, out var src))
+                    continue;
+
+                long segStartMs =  i == startIdx ? inMs  - offsets[i] : 0;
+                long? segEndMs  =  i == endIdx   ? outMs - offsets[i] : null;
+                int  partIdx    =  partCount > 1  ? i - startIdx + 1  : 0;
+
+                var outName = ClipsManager.BuildClipName(firstTs, inMs, outMs, angle, partIdx);
+                var outPath = Path.Combine(clipsDir, outName);
+
+                int partBase = (i - startIdx) * 100;
+                var progress = new Progress<double>(pct =>
+                    ArchiveProgress.Value = partBase + pct);
+
+                await ExportSegmentAsync(src, outPath, segStartMs, segEndMs, progress);
+                exported.Add(outPath);
+            }
+
+            StatusLabel.Text = partCount > 1
+                ? $"Exported {partCount} parts to clips folder."
+                : "Clip exported to clips folder.";
+
+            LoadClips();
+            SourceTabs.SelectedIndex = 2;
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = $"Export error: {ex.Message}";
+        }
+        finally
+        {
+            ArchiveProgress.Visibility = Visibility.Collapsed;
+            UpdateInOutDisplay();
+        }
+    }
+
+    private static async Task ExportSegmentAsync(
+        string sourcePath, string destPath,
+        long startMs, long? endMs,
+        IProgress<double>? progress = null)
+    {
+        var sourceFile = await StorageFile.GetFileFromPathAsync(sourcePath);
+        var destFolder = await StorageFolder.GetFolderFromPathAsync(
+            Path.GetDirectoryName(destPath)!);
+        var destFile = await destFolder.CreateFileAsync(
+            Path.GetFileName(destPath),
+            CreationCollisionOption.ReplaceExisting);
+
+        var profile    = await MediaEncodingProfile.CreateFromFileAsync(sourceFile);
+        var transcoder = new MediaTranscoder
+        {
+            TrimStartTime = TimeSpan.FromMilliseconds(startMs),
+        };
+        if (endMs.HasValue)
+            transcoder.TrimStopTime = TimeSpan.FromMilliseconds(endMs.Value);
+
+        var prepared = await transcoder.PrepareFileTranscodeAsync(sourceFile, destFile, profile);
+        if (!prepared.CanTranscode)
+            throw new InvalidOperationException($"Cannot transcode: {prepared.FailureReason}");
+
+        if (progress is not null)
+            await prepared.TranscodeAsync().AsTask(new Progress<double>(p => progress.Report(p)));
+        else
+            await prepared.TranscodeAsync();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
     // Quad view
     // ═════════════════════════════════════════════════════════════════════════
 
@@ -896,13 +1245,14 @@ public partial class MainWindow : Window
         {
             WindowStyle = _savedWindowStyle;
             WindowState = _savedWindowState;
-            MainMenu.Visibility      = Visibility.Visible;
-            Sidebar.Visibility       = Visibility.Visible;
+            MainMenu.Visibility       = Visibility.Visible;
+            Sidebar.Visibility        = Visibility.Visible;
             AngleBtnsPanel.Visibility = Visibility.Visible;
-            AngleLabel.Visibility    = Visibility.Visible;
-            SeekBarGrid.Visibility   = Visibility.Visible;
+            AngleLabel.Visibility     = Visibility.Visible;
+            InOutPanel.Visibility     = Visibility.Visible;
+            SeekBarGrid.Visibility    = Visibility.Visible;
             TransportPanel.Visibility = Visibility.Visible;
-            StatusLabel.Visibility   = Visibility.Visible;
+            StatusLabel.Visibility    = Visibility.Visible;
             MainGrid.ColumnDefinitions[0].Width = new GridLength(240);
         }
         else
@@ -911,13 +1261,14 @@ public partial class MainWindow : Window
             _savedWindowState = WindowState;
             WindowStyle = WindowStyle.None;
             WindowState = WindowState.Maximized;
-            MainMenu.Visibility      = Visibility.Collapsed;
-            Sidebar.Visibility       = Visibility.Collapsed;
+            MainMenu.Visibility       = Visibility.Collapsed;
+            Sidebar.Visibility        = Visibility.Collapsed;
             AngleBtnsPanel.Visibility = Visibility.Collapsed;
-            AngleLabel.Visibility    = Visibility.Collapsed;
-            SeekBarGrid.Visibility   = Visibility.Collapsed;
+            AngleLabel.Visibility     = Visibility.Collapsed;
+            InOutPanel.Visibility     = Visibility.Collapsed;
+            SeekBarGrid.Visibility    = Visibility.Collapsed;
             TransportPanel.Visibility = Visibility.Collapsed;
-            StatusLabel.Visibility   = Visibility.Collapsed;
+            StatusLabel.Visibility    = Visibility.Collapsed;
             MainGrid.ColumnDefinitions[0].Width = new GridLength(0);
         }
         _fullscreen = !_fullscreen;
@@ -994,4 +1345,10 @@ internal sealed class SessionListItem
     public required int          SessionIndex { get; init; }
     public required string       FirstTs      { get; init; }
     public List<string>?         Session      { get; init; }
+}
+
+internal sealed class ClipListItem
+{
+    public required string FilePath { get; init; }
+    public required string Label    { get; init; }
 }

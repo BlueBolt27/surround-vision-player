@@ -1,7 +1,7 @@
 <Window x:Class="SurroundVisionPlayer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Surround Vision Player v0.2.2 — 2027 Chevy Bolt"
+        Title="Surround Vision Player v0.3.0 — 2027 Chevy Bolt"
         Width="1280" Height="820" MinWidth="900" MinHeight="580"
         Background="#1A1A2E" Foreground="#E0E0E0"
         PreviewKeyDown="Window_PreviewKeyDown"
@@ -185,6 +185,10 @@
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#0F3460"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.3"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -505,6 +509,21 @@
                         </DockPanel>
                     </TabItem>
 
+                    <!-- Clips tab -->
+                    <TabItem Header="Clips">
+                        <DockPanel>
+                            <Button x:Name="BtnDeleteClip" DockPanel.Dock="Bottom"
+                                    Content="✕  Delete Clip"
+                                    Style="{StaticResource DarkBtn}"
+                                    IsEnabled="False"
+                                    Click="DeleteClip_Click"
+                                    Margin="0,4,0,0"
+                                    ToolTip="Permanently delete selected exported clip"/>
+                            <TreeView x:Name="ClipsTree"
+                                      SelectedItemChanged="ClipsTree_SelectedItemChanged"/>
+                        </DockPanel>
+                    </TabItem>
+
                 </TabControl>
 
             </DockPanel>
@@ -565,6 +584,42 @@
                                     Click="End_Click" FontSize="18"
                                     Width="50" Height="44" Margin="2,0"
                                     ToolTip="Go to end of current clip"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+
+                <!-- In/Out marker strip -->
+                <Border x:Name="InOutPanel" DockPanel.Dock="Bottom"
+                        BorderBrush="#0F3460" BorderThickness="0,1,0,0"
+                        Background="#16213E" Padding="6,4" Margin="0,2,0,0">
+                    <DockPanel>
+                        <Button x:Name="BtnExportClip" DockPanel.Dock="Right"
+                                Content="Export Clip"
+                                Style="{StaticResource DarkBtn}"
+                                IsEnabled="False"
+                                Click="ExportClip_Click"
+                                Margin="8,0,0,0"
+                                ToolTip="Export the marked selection [Ctrl+E]"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BtnMarkIn" Content="Mark In [I]"  Style="{StaticResource DarkBtn}"
+                                    Padding="8,3" Margin="0,0,8,0" Click="MarkIn_Click"
+                                    ToolTip="Set in-point at current position [I]"/>
+                            <TextBlock x:Name="InLabel"  Text="–"
+                                       Foreground="#E94560" VerticalAlignment="Center"
+                                       FontSize="12" MinWidth="38" Margin="0,0,4,0"/>
+                            <TextBlock Text="→" Foreground="#444444" VerticalAlignment="Center"
+                                       Margin="0,0,4,0"/>
+                            <TextBlock x:Name="SelectionDurLabel" Text=""
+                                       Foreground="#888888" VerticalAlignment="Center"
+                                       FontSize="12" MinWidth="38" Margin="0,0,4,0"/>
+                            <TextBlock Text="→" Foreground="#444444" VerticalAlignment="Center"
+                                       Margin="0,0,4,0"/>
+                            <TextBlock x:Name="OutLabel" Text="–"
+                                       Foreground="#E94560" VerticalAlignment="Center"
+                                       FontSize="12" MinWidth="38" Margin="0,0,8,0"/>
+                            <Button x:Name="BtnMarkOut" Content="Mark Out [O]" Style="{StaticResource DarkBtn}"
+                                    Padding="8,3" Click="MarkOut_Click"
+                                    ToolTip="Set out-point at current position [O]"/>
                         </StackPanel>
                     </DockPanel>
                 </Border>
