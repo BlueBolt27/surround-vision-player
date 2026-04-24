@@ -3,8 +3,10 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Line = System.Windows.Shapes.Line;
 using SurroundVisionPlayer.Logic;
 using Windows.Media.MediaProperties;
 using Windows.Media.Transcoding;
@@ -22,6 +24,7 @@ public partial class MainWindow : Window
     private SortedDictionary<string, Dictionary<string, string>> _archiveRecordings = [];
     private List<List<string>>                                    _archiveSessions   = [];
     private List<ClipEntry>                                       _clips             = [];
+    private List<Bookmark>                                        _bookmarks         = [];
 
     // Points to whichever source is currently being played
     private SortedDictionary<string, Dictionary<string, string>> _recordings = [];
@@ -39,6 +42,7 @@ public partial class MainWindow : Window
     private int      _pendingOpens;
     private bool     _suppressTreeChange;
     private bool     _quadView;
+    private bool     _bookmarkInputActive;
 
     // ── Clip mode & in/out state ──────────────────────────────────────────────
 
@@ -106,6 +110,45 @@ public partial class MainWindow : Window
     }
 
     // ═════════════════════════════════════════════════════════════════════════
+    // USB auto-load
+    // ═════════════════════════════════════════════════════════════════════════
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        var source = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        source?.AddHook(WndProc);
+    }
+
+    private const int WmDeviceChange   = 0x0219;
+    private const int DbtDeviceArrival = 0x8000;
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg == WmDeviceChange && wParam.ToInt32() == DbtDeviceArrival)
+            Dispatcher.BeginInvoke(TryAutoLoadDrive);
+        return IntPtr.Zero;
+    }
+
+    private void TryAutoLoadDrive()
+    {
+        foreach (var drive in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Removable))
+        {
+            try { if (!drive.IsReady) continue; }
+            catch { continue; }
+
+            var svrPath = RecordingScanner.FindSvrFolder(drive.RootDirectory.FullName);
+            if (svrPath is null) continue;
+            if (_driveFolderPath == svrPath) return;
+
+            LoadFolder(svrPath);
+            SourceTabs.SelectedIndex = 0;
+            StatusLabel.Text = $"Auto-loaded from {drive.Name}";
+            return;
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
     // Source management
     // ═════════════════════════════════════════════════════════════════════════
 
@@ -153,6 +196,7 @@ public partial class MainWindow : Window
 
         PopulateTree(ArchiveTree, _archiveSessions, _archiveRecordings);
         LoadClips();
+        LoadBookmarks();
 
         if (SourceTabs.SelectedIndex == 1)
             UpdateCountLabel();
@@ -604,6 +648,7 @@ public partial class MainWindow : Window
         UseSource(_driveRecordings, _driveSessions);
         InitSessionTimeline(item.SessionIndex);
         LoadRecording(item.FirstTs, item.SessionIndex);
+        RefreshBookmarkCanvas();
         if (wasPlaying) PlayAll();
     }
 
@@ -629,6 +674,7 @@ public partial class MainWindow : Window
         UseSource(_archiveRecordings, _archiveSessions);
         InitSessionTimeline(item.SessionIndex);
         LoadRecording(item.FirstTs, item.SessionIndex);
+        RefreshBookmarkCanvas();
         if (wasPlaying) PlayAll();
     }
 
@@ -697,6 +743,15 @@ public partial class MainWindow : Window
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape)
+        {
+            if (_bookmarkInputActive) { DismissBookmarkInput(); e.Handled = true; }
+            else if (_fullscreen)     { ToggleFullscreen();     e.Handled = true; }
+            return;
+        }
+
+        if (_bookmarkInputActive) return;
+
         switch (e.Key)
         {
             case Key.Space:
@@ -727,9 +782,9 @@ public partial class MainWindow : Window
             case Key.F11:
                 ToggleFullscreen();
                 e.Handled = true; break;
-            case Key.Escape:
-                if (_fullscreen) { ToggleFullscreen(); e.Handled = true; }
-                break;
+            case Key.B:
+                ShowBookmarkInput();
+                e.Handled = true; break;
         }
     }
 
@@ -1273,6 +1328,107 @@ public partial class MainWindow : Window
         }
         _fullscreen = !_fullscreen;
     }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Bookmarks
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void LoadBookmarks()
+    {
+        _bookmarks = string.IsNullOrEmpty(_settings.ArchiveFolder)
+            ? []
+            : BookmarkManager.Load(_settings.ArchiveFolder);
+        RefreshBookmarkCanvas();
+    }
+
+    private void AddBookmark(string firstTs, long sessionMs, string note)
+    {
+        if (string.IsNullOrEmpty(_settings.ArchiveFolder)) return;
+        _bookmarks.Add(new Bookmark(firstTs, sessionMs, note));
+        BookmarkManager.Save(_settings.ArchiveFolder, _bookmarks);
+        RefreshBookmarkCanvas();
+    }
+
+    private void DeleteBookmark(Bookmark bm)
+    {
+        if (string.IsNullOrEmpty(_settings.ArchiveFolder)) return;
+        _bookmarks.Remove(bm);
+        BookmarkManager.Save(_settings.ArchiveFolder, _bookmarks);
+        RefreshBookmarkCanvas();
+    }
+
+    private void RefreshBookmarkCanvas()
+    {
+        BookmarkCanvas.Children.Clear();
+        if (_currentSession < 0 || _sessionTotalMs == 0) return;
+
+        var session = _sessions[_currentSession];
+        var sessionBookmarks = BookmarkManager.ForSession(_bookmarks, session[0]);
+        double width = BookmarkCanvas.ActualWidth;
+        if (width <= 0) return;
+
+        foreach (var bm in sessionBookmarks)
+        {
+            double x = (double)bm.SessionMs / _sessionTotalMs * width;
+            var line = new Line
+            {
+                X1 = x, Y1 = 0,
+                X2 = x, Y2 = Math.Max(BookmarkCanvas.ActualHeight, 14),
+                Stroke = new SolidColorBrush(Color.FromArgb(200, 233, 69, 96)),
+                StrokeThickness = 2,
+                ToolTip = string.IsNullOrWhiteSpace(bm.Note)
+                    ? FormatTime(TimeSpan.FromMilliseconds(bm.SessionMs))
+                    : $"{FormatTime(TimeSpan.FromMilliseconds(bm.SessionMs))}: {bm.Note}",
+            };
+            var captured = bm;
+            line.MouseRightButtonDown += (_, e2) =>
+            {
+                var r = MessageBox.Show(
+                    $"Delete bookmark at {FormatTime(TimeSpan.FromMilliseconds(captured.SessionMs))}?",
+                    "Delete Bookmark", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (r == MessageBoxResult.Yes) DeleteBookmark(captured);
+                e2.Handled = true;
+            };
+            BookmarkCanvas.Children.Add(line);
+        }
+    }
+
+    private void ShowBookmarkInput()
+    {
+        if (_currentSession < 0) return;
+        _bookmarkInputActive = true;
+        BookmarkInputPanel.Visibility = Visibility.Visible;
+        BookmarkNoteBox.Text = "";
+        BookmarkNoteBox.Focus();
+    }
+
+    private void CommitBookmark()
+    {
+        if (_currentSession < 0) return;
+        long sessionMs = _sessionOffsetMs + (long)_videos[_activeAngle].Position.TotalMilliseconds;
+        var firstTs = _sessions[_currentSession][0];
+        AddBookmark(firstTs, sessionMs, BookmarkNoteBox.Text.Trim());
+        StatusLabel.Text = $"Bookmark added at {FormatTime(TimeSpan.FromMilliseconds(sessionMs))}";
+        DismissBookmarkInput();
+    }
+
+    private void DismissBookmarkInput()
+    {
+        _bookmarkInputActive = false;
+        BookmarkInputPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private void BtnBookmark_Click(object sender, RoutedEventArgs e)       => ShowBookmarkInput();
+    private void BtnBookmarkSave_Click(object sender, RoutedEventArgs e)   => CommitBookmark();
+    private void BtnBookmarkCancel_Click(object sender, RoutedEventArgs e) => DismissBookmarkInput();
+
+    private void BookmarkNoteBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { CommitBookmark(); e.Handled = true; }
+    }
+
+    private void BookmarkCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        => RefreshBookmarkCanvas();
 
     // ═════════════════════════════════════════════════════════════════════════
     // Drive picker
