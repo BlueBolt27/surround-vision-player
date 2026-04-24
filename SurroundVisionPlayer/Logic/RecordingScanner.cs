@@ -18,6 +18,13 @@ public static class RecordingScanner
 
     public static readonly string[] Angles = ["FRONT", "LEFT", "REAR", "RIGHT"];
 
+    /// <summary>Returns the next angle after <paramref name="current"/> in cycle order.</summary>
+    public static string CycleAngle(string current)
+    {
+        int idx = Array.IndexOf(Angles, current);
+        return Angles[(idx < 0 ? 0 : idx + 1) % Angles.Length];
+    }
+
     /// <summary>
     /// Scan <paramref name="folder"/> and return recordings grouped by timestamp,
     /// sorted ascending.  Each inner dictionary maps angle → full file path.

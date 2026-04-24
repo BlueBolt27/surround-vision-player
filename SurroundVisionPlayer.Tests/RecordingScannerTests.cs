@@ -115,6 +115,23 @@ public class RecordingScannerTests : IDisposable
         Assert.Equal(Path.Combine(_tmp, name), result["2026_04_16_T_15_18_19"]["FRONT"]);
     }
 
+    // ── CycleAngle ────────────────────────────────────────────────────────────
+
+    [Fact] public void CycleAngle_Front_ReturnsLeft()
+        => Assert.Equal("LEFT",  RecordingScanner.CycleAngle("FRONT"));
+
+    [Fact] public void CycleAngle_Left_ReturnsRear()
+        => Assert.Equal("REAR",  RecordingScanner.CycleAngle("LEFT"));
+
+    [Fact] public void CycleAngle_Rear_ReturnsRight()
+        => Assert.Equal("RIGHT", RecordingScanner.CycleAngle("REAR"));
+
+    [Fact] public void CycleAngle_Right_WrapsToFront()
+        => Assert.Equal("FRONT", RecordingScanner.CycleAngle("RIGHT"));
+
+    [Fact] public void CycleAngle_Unknown_ReturnsFront()
+        => Assert.Equal("FRONT", RecordingScanner.CycleAngle("UNKNOWN"));
+
     // ── FindSvrFolder ─────────────────────────────────────────────────────────
 
     [Fact]

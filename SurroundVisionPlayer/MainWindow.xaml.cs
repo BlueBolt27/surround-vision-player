@@ -34,6 +34,13 @@ public partial class MainWindow : Window
     private bool     _suppressSlider;
     private int      _pendingOpens;
     private bool     _suppressTreeChange;
+    private bool     _quadView;
+
+    // ── Fullscreen state ──────────────────────────────────────────────────────
+
+    private bool        _fullscreen;
+    private WindowStyle _savedWindowStyle;
+    private WindowState _savedWindowState;
 
     // ── Session-level timeline ────────────────────────────────────────────────
 
@@ -416,18 +423,25 @@ public partial class MainWindow : Window
         var refPos = _videos[_activeAngle].Position;
 
         _activeAngle = angle;
-        AngleLabel.Text = angle;
 
-        foreach (var (a, me) in _videos)
-        {
-            me.Visibility = a == angle ? Visibility.Visible : Visibility.Hidden;
-            me.IsMuted    = a != angle;
-        }
         foreach (var (a, btn) in _angleBtns)
             btn.IsChecked = a == angle;
 
-        if (refPos > TimeSpan.Zero && _videos[angle].Source is not null)
-            _videos[angle].Position = refPos;
+        foreach (var (a, me) in _videos)
+            me.IsMuted = a != angle;
+
+        if (_quadView)
+        {
+            AngleLabel.Text = $"QUAD ({angle})";
+        }
+        else
+        {
+            AngleLabel.Text = angle;
+            foreach (var (a, me) in _videos)
+                me.Visibility = a == angle ? Visibility.Visible : Visibility.Hidden;
+            if (refPos > TimeSpan.Zero && _videos[angle].Source is not null)
+                _videos[angle].Position = refPos;
+        }
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -657,6 +671,18 @@ public partial class MainWindow : Window
             case Key.L: SwitchAngle("LEFT");  e.Handled = true; break;
             case Key.R: SwitchAngle("REAR");  e.Handled = true; break;
             case Key.G: SwitchAngle("RIGHT"); e.Handled = true; break;
+            case Key.Tab:
+                SwitchAngle(RecordingScanner.CycleAngle(_activeAngle));
+                e.Handled = true; break;
+            case Key.Q:
+                SetQuadView(!_quadView);
+                e.Handled = true; break;
+            case Key.F11:
+                ToggleFullscreen();
+                e.Handled = true; break;
+            case Key.Escape:
+                if (_fullscreen) { ToggleFullscreen(); e.Handled = true; }
+                break;
         }
     }
 
@@ -808,6 +834,93 @@ public partial class MainWindow : Window
         foreach (var dir in Directory.EnumerateDirectories(archiveRoot))
             if (!Directory.EnumerateFileSystemEntries(dir).Any())
                 Directory.Delete(dir);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Quad view
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void SetQuadView(bool quad)
+    {
+        _quadView = quad;
+        BtnQuad.IsChecked = quad;
+
+        VideoGrid.RowDefinitions.Clear();
+        VideoGrid.ColumnDefinitions.Clear();
+
+        if (quad)
+        {
+            VideoGrid.RowDefinitions.Add(new RowDefinition());
+            VideoGrid.RowDefinitions.Add(new RowDefinition());
+            VideoGrid.ColumnDefinitions.Add(new ColumnDefinition());
+            VideoGrid.ColumnDefinitions.Add(new ColumnDefinition());
+
+            Grid.SetRow(VideoFront, 0); Grid.SetColumn(VideoFront, 0);
+            Grid.SetRow(VideoLeft,  0); Grid.SetColumn(VideoLeft,  1);
+            Grid.SetRow(VideoRear,  1); Grid.SetColumn(VideoRear,  0);
+            Grid.SetRow(VideoRight, 1); Grid.SetColumn(VideoRight, 1);
+
+            foreach (var (a, me) in _videos)
+            {
+                me.Visibility = Visibility.Visible;
+                me.IsMuted    = a != _activeAngle;
+            }
+            AngleLabel.Text = $"QUAD ({_activeAngle})";
+        }
+        else
+        {
+            foreach (var me in _videos.Values)
+            {
+                Grid.SetRow(me, 0);
+                Grid.SetColumn(me, 0);
+            }
+            foreach (var (a, me) in _videos)
+            {
+                me.Visibility = a == _activeAngle ? Visibility.Visible : Visibility.Hidden;
+                me.IsMuted    = a != _activeAngle;
+            }
+            AngleLabel.Text = _activeAngle;
+        }
+    }
+
+    private void BtnQuad_Click(object sender, RoutedEventArgs e)
+        => SetQuadView(BtnQuad.IsChecked == true);
+
+    // ═════════════════════════════════════════════════════════════════════════
+    // Fullscreen
+    // ═════════════════════════════════════════════════════════════════════════
+
+    private void ToggleFullscreen()
+    {
+        if (_fullscreen)
+        {
+            WindowStyle = _savedWindowStyle;
+            WindowState = _savedWindowState;
+            MainMenu.Visibility      = Visibility.Visible;
+            Sidebar.Visibility       = Visibility.Visible;
+            AngleBtnsPanel.Visibility = Visibility.Visible;
+            AngleLabel.Visibility    = Visibility.Visible;
+            SeekBarGrid.Visibility   = Visibility.Visible;
+            TransportPanel.Visibility = Visibility.Visible;
+            StatusLabel.Visibility   = Visibility.Visible;
+            MainGrid.ColumnDefinitions[0].Width = new GridLength(240);
+        }
+        else
+        {
+            _savedWindowStyle = WindowStyle;
+            _savedWindowState = WindowState;
+            WindowStyle = WindowStyle.None;
+            WindowState = WindowState.Maximized;
+            MainMenu.Visibility      = Visibility.Collapsed;
+            Sidebar.Visibility       = Visibility.Collapsed;
+            AngleBtnsPanel.Visibility = Visibility.Collapsed;
+            AngleLabel.Visibility    = Visibility.Collapsed;
+            SeekBarGrid.Visibility   = Visibility.Collapsed;
+            TransportPanel.Visibility = Visibility.Collapsed;
+            StatusLabel.Visibility   = Visibility.Collapsed;
+            MainGrid.ColumnDefinitions[0].Width = new GridLength(0);
+        }
+        _fullscreen = !_fullscreen;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
