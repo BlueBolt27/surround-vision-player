@@ -442,6 +442,7 @@
         <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="#16213E" Foreground="#E0E0E0">
             <MenuItem Header="_File">
                 <MenuItem Header="Set Archive Folder…" Click="SetArchiveFolder_Click"/>
+                <MenuItem x:Name="MenuAutoArchive" Click="MenuAutoArchive_Click"/>
                 <Separator/>
                 <MenuItem Header="Open Thumb Drive…"   Click="OpenDrive_Click"
                           InputGestureText="Ctrl+O"/>

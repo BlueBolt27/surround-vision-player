@@ -86,6 +86,7 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _settings = AppSettings.Load();
+        UpdateAutoArchiveMenuItem();
 
         _videos = new Dictionary<string, MediaElement>
         {
@@ -131,7 +132,7 @@ public partial class MainWindow : Window
         return IntPtr.Zero;
     }
 
-    private void TryAutoLoadDrive()
+    private async void TryAutoLoadDrive()
     {
         foreach (var drive in DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Removable))
         {
@@ -145,7 +146,56 @@ public partial class MainWindow : Window
             LoadFolder(svrPath);
             SourceTabs.SelectedIndex = 0;
             StatusLabel.Text = $"Auto-loaded from {drive.Name}";
+
+            if (_settings.AutoArchiveOnInsert)
+                await AutoArchiveAllAsync();
+
             return;
+        }
+    }
+
+    private async Task AutoArchiveAllAsync()
+    {
+        if (string.IsNullOrEmpty(_settings.ArchiveFolder) && !PickArchiveFolder())
+            return;
+
+        var archiveRoot = _settings.ArchiveFolder!;
+        var recordings  = _driveRecordings;
+        var allTs       = _driveSessions.SelectMany(s => s).ToList();
+        int totalFiles  = Archiver.CountFiles(allTs, recordings);
+
+        if (totalFiles == 0)
+        {
+            StatusLabel.Text = "Auto-archive: no files found on drive.";
+            return;
+        }
+
+        ArchiveProgress.Maximum    = totalFiles;
+        ArchiveProgress.Value      = 0;
+        ArchiveProgress.Visibility = Visibility.Visible;
+        StatusLabel.Text           = $"Auto-archiving — 0 / {totalFiles} files…";
+
+        var progress = new Progress<int>(n =>
+        {
+            ArchiveProgress.Value = n;
+            StatusLabel.Text      = $"Auto-archiving — {n} / {totalFiles} files…";
+        });
+
+        try
+        {
+            int copied = await Task.Run(() => Archiver.Archive(allTs, recordings, archiveRoot, progress));
+            StatusLabel.Text = copied > 0
+                ? $"Auto-archived {copied} new file(s) to {archiveRoot}"
+                : "Auto-archive: all files already present in archive.";
+            LoadArchive();
+        }
+        catch (Exception ex)
+        {
+            StatusLabel.Text = $"Auto-archive error: {ex.Message}";
+        }
+        finally
+        {
+            ArchiveProgress.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -865,6 +915,18 @@ public partial class MainWindow : Window
     private void SetArchiveFolder_Click(object sender, RoutedEventArgs e)
     {
         if (PickArchiveFolder()) LoadArchive();
+    }
+
+    private void MenuAutoArchive_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.AutoArchiveOnInsert = !_settings.AutoArchiveOnInsert;
+        _settings.Save();
+        UpdateAutoArchiveMenuItem();
+    }
+
+    private void UpdateAutoArchiveMenuItem()
+    {
+        MenuAutoArchive.Header = (_settings.AutoArchiveOnInsert ? "✓  " : "     ") + "Auto-Archive on USB Insert";
     }
 
     private bool PickArchiveFolder()

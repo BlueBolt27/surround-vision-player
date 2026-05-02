@@ -5,7 +5,8 @@ namespace SurroundVisionPlayer.Logic;
 
 public class AppSettings
 {
-    public string? ArchiveFolder { get; set; }
+    public string? ArchiveFolder        { get; set; }
+    public bool   AutoArchiveOnInsert  { get; set; }
 
     private static readonly string SettingsPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
