@@ -307,7 +307,7 @@ public partial class MainWindow : Window
                             ? "No archive folder set.\nUse File → Set Archive Folder…"
                             : "No recordings found.",
                 Focusable = false,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x40, 0x55)),
             };
             tree.Items.Add(hint);
         }
@@ -1071,7 +1071,7 @@ public partial class MainWindow : Window
                             ? "No archive folder set.\nUse File → Set Archive Folder…"
                             : "No exported clips yet.\nUse I/O to mark in/out points, then Export.",
                 Focusable = false,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55)),
+                Foreground = new SolidColorBrush(Color.FromRgb(0x2A, 0x40, 0x55)),
             });
         }
 
@@ -1451,7 +1451,7 @@ public partial class MainWindow : Window
             {
                 X1 = x, Y1 = 0,
                 X2 = x, Y2 = Math.Max(BookmarkCanvas.ActualHeight, 14),
-                Stroke = new SolidColorBrush(Color.FromArgb(200, 233, 69, 96)),
+                Stroke = new SolidColorBrush(Color.FromArgb(220, 0, 200, 255)),
                 StrokeThickness = 2,
                 ToolTip = string.IsNullOrWhiteSpace(bm.Note)
                     ? FormatTime(TimeSpan.FromMilliseconds(bm.SessionMs))
